@@ -42,49 +42,56 @@ Registry.as<IWorkbenchActionRegistry>(ActionExtensions.WorkbenchActions).registe
 	localize('developer', 'Developer')
 );
 
-CommandsRegistry.registerCommand('workbench.action.configureTrustedDomains', (accessor, domainToConfigure?: string) => {
-	const quickInputService = accessor.get(IQuickInputService);
-	const storageService = accessor.get(IStorageService);
+CommandsRegistry.registerCommand({
+	id: 'workbench.action.configureTrustedDomains',
+	description: {
+		description: 'Configure Trusted Domains',
+		args: [{ name: 'domainToConfigure', schema: { type: 'string' } }]
+	},
+	handler: (accessor, domainToConfigure?: string) => {
+		const quickInputService = accessor.get(IQuickInputService);
+		const storageService = accessor.get(IStorageService);
 
-	let trustedDomains: string[] = [];
-	try {
-		trustedDomains = JSON.parse(storageService.get('http.trustedDomains', StorageScope.GLOBAL, '[]'));
-	} catch (err) { }
+		let trustedDomains: string[] = [];
+		try {
+			trustedDomains = JSON.parse(storageService.get('http.trustedDomains', StorageScope.GLOBAL, '[]'));
+		} catch (err) { }
 
-	const quickPickItems: IQuickPickItem[] = trustedDomains
-		.filter(d => d !== '*')
-		.map(d => {
-			return {
+		const domainQuickPickItems: IQuickPickItem[] = trustedDomains
+			.filter(d => d !== '*')
+			.map(d => {
+				return {
+					type: 'item',
+					label: d,
+					picked: true,
+				};
+			});
+
+		const specialQuickPickItems: IQuickPickItem[] = [
+			{
 				type: 'item',
-				label: d,
-				picked: true,
-			};
-		});
+				label: 'Allow all links to be open without protection',
+				picked: trustedDomains.indexOf('*') !== -1
+			}
+		];
 
-	const specialQuickPickItems: (IQuickPickItem | IQuickPickSeparator)[] = [
-		{
-			type: 'item',
-			label: 'Allow all links to be open without protection',
-			picked: trustedDomains.indexOf('*') !== -1
+		let domainToConfigureItem: IQuickPickItem | undefined = undefined;
+		if (domainToConfigure) {
+			domainToConfigureItem = { type: 'item', label: domainToConfigure, picked: true };
+			specialQuickPickItems.push(<IQuickPickItem>domainToConfigureItem);
 		}
-	];
 
-	if (domainToConfigure) {
-		specialQuickPickItems.push({
-			type: 'item',
-			label: domainToConfigure,
-			picked: true
+		const quickPickItems: (IQuickPickItem | IQuickPickSeparator)[] = domainQuickPickItems.length === 0
+			? specialQuickPickItems
+			: [...specialQuickPickItems, { type: 'separator' }, ...domainQuickPickItems];
+
+		return quickInputService.pick(quickPickItems, {
+			canPickMany: true,
+			activeItem: domainToConfigureItem
+		}).then(result => {
+			if (result) {
+				storageService.store('http.trustedDomains', JSON.stringify(result.map(r => r.label)), StorageScope.GLOBAL);
+			}
 		});
 	}
-	specialQuickPickItems.push({
-		type: 'separator'
-	});
-
-	return quickInputService.pick([...specialQuickPickItems, ...quickPickItems], {
-		canPickMany: true
-	}).then(result => {
-		if (result) {
-			storageService.store('http.trustedDomains', JSON.stringify(result.map(r => r.label)), StorageScope.GLOBAL);
-		}
-	});
 });
